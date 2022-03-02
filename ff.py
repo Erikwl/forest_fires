@@ -3,21 +3,21 @@ from numpy.random import randint, choice, seed
 from pyics import Model
 
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+# import matplotlib.colors as mcolors
 
 
-def decimal_to_base_k(n, k):
-    """Converts a given decimal (i.e. base-10 integer) to a list containing the
-    base-k equivalant.
+# def decimal_to_base_k(n, k):
+#     """Converts a given decimal (i.e. base-10 integer) to a list containing the
+#     base-k equivalant.
 
-    For example, for n=34 and k=3 this function should return [1, 0, 2, 1]."""
+#     For example, for n=34 and k=3 this function should return [1, 0, 2, 1]."""
 
-    result = np.array([])
-    while n:
-        digit = n % k
-        result = np.append(result, digit)
-        n //= k
-    return result[::-1]
+#     result = np.array([])
+#     while n:
+#         digit = n % k
+#         result = np.append(result, digit)
+#         n //= k
+#     return result[::-1]
 
 
 class CASim(Model):
@@ -90,7 +90,7 @@ class CASim(Model):
         """Returns an array of length `width' with the initial state for each of
         the cells in the first row. Values should be between 0 and k."""
 
-        
+
 
         return result
 
