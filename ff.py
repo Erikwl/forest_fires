@@ -1,113 +1,78 @@
 import numpy as np
-from numpy.random import randint, choice, seed
+import random
 from pyics import Model
 
 import matplotlib.pyplot as plt
-# import matplotlib.colors as mcolors
+from pixelize_image import image
 
+"""
+States:
+0: sand
+1: gras/bush
+2: trees
+3: burning gras/bush
+4: burning trees
+5: burned down
+"""
 
-# def decimal_to_base_k(n, k):
-#     """Converts a given decimal (i.e. base-10 integer) to a list containing the
-#     base-k equivalant.
+BURNING_RED = np.array([217, 63, 63], dtype=np.uint8)
+TREE_GREEN = np.array([63, 92, 59], dtype=np.uint8)
+GRAS_GREEN = np.array([135, 166, 131], dtype=np.uint8)
 
-#     For example, for n=34 and k=3 this function should return [1, 0, 2, 1]."""
+SAND_WHITE = np.array([213, 230, 204], dtype=np.uint8)
+BURNED_BLACK = np.array([0, 0, 0], dtype=np.uint8)
 
-#     result = np.array([])
-#     while n:
-#         digit = n % k
-#         result = np.append(result, digit)
-#         n //= k
-#     return result[::-1]
-
+state_colors = [SAND_WHITE, GRAS_GREEN, TREE_GREEN, BURNING_RED, BURNED_BLACK]
+burn_time = [0, 1, 2] # Burn time of sand, gras and trees
 
 class CASim(Model):
     def __init__(self):
         Model.__init__(self)
 
         self.t = 0
-        self.config = None
-        self.set_seed(0)
+        self.image_name = 'place.png'
+        self.size = 200
+        self.run_time = 200
 
-        self.make_param('r', 1)
-        self.make_param('k', 2)
-        self.make_param('width', 50)
-        self.make_param('height', 50)
-        self.make_param('Lambda', 0.0, setter=self.setter_lambda)
-        self.make_param('random', False)
+        self.height = self.size
+        self.width = self.size
 
-    def set_seed(self, random_seed):
-        self.seed = random_seed
+        sand = (23, 31, 83, 89)
+        gras = (130, 160, 130, 160)
+        woods = (75, 120, 110, 155)
 
-    def show_colormap(self):
-        temp_data = np.random.rand(10,10) * 2 - 1
-        plt.pcolor(temp_data, cmap=self.cmap)
-        plt.colorbar()
-        plt.show()
+        self.areas = np.array([sand, gras, woods])
+        self.areas = np.array(list(list(map(int, area * self.size / 200)) for area in self.areas))
 
-    def setter_lambda(self, val):
-        """Setter for the lambda parameter, changing the given value to the
-        closest possible value of lambda."""
-        k_N = int(self.k ** (2 * self.r + 1))
-        k_N_lam = max(0, min(k_N, round(k_N * val)))
-        return k_N_lam / k_N
-
-    def build_rule_set(self):
-        """Sets the rule set for the current rule.
-        A rule set is a list with the new state for every old configuration."""
-
-        k_N = int(self.k ** (2 * self.r + 1))
-
-        # Check if the new lambda is smaller than the current one or
-        # if there is no rule set yet.
-        if not len(self.rule_set) or len(self.rule_set) != k_N \
-            or sum(0 != self.rule_set) / len(self.rule_set) > self.Lambda:
-            self.rule_set = np.zeros(k_N)
-        cur_lam = sum(0 != self.rule_set) / len(self.rule_set)
-
-        # Choose items that are going to be changed.
-        zero_items = [i for i in range(k_N) if self.rule_set[i] == 0]
-        nr_items_to_chose = int((self.Lambda - cur_lam) * k_N)
-        chosen_items = choice(zero_items, size=nr_items_to_chose, replace=False)
-
-        # Change the items.
-        for index in chosen_items:
-            self.rule_set[index] = choice(range(1, self.k))
-
-
-    def check_rule(self, inp):
-        """Returns the new state based on the input states.
-
-        The input state will be an array of 2r+1 items between 0 and k, the
-        neighbourhood which the state of the new cell depends on."""
-
-        # Transform the list into an integer.
-        combined_state = int(sum(state * self.k ** i \
-                                 for i, state in enumerate(inp[::-1])))
-        state_index = - combined_state - 1
-        return self.rule_set[state_index]
-
-    def setup_initial_state(self):
+    def setup_initial_field(self):
         """Returns an array of length `width' with the initial state for each of
         the cells in the first row. Values should be between 0 and k."""
 
+        self.image = image(self.areas, self.image_name)
 
+        self.image.resize_image(self.size)
+        self.image.classify_pixels()
 
-        return result
+        return self.image.classified_pixels
 
     def reset(self):
         """Initializes the configuration of the cells and converts the entered
         rule number to a rule set."""
+        states = self.setup_initial_field()
 
-        # Only reset the values up to the current time.
-        if self.t > 0 and self.t < self.height:
-            self.config[:self.t + 1] = np.zeros([self.t + 1, self.width])
-        else:
-            self.config = np.zeros([self.height, self.width])
+        self.config = [[{'state' : int(states[row][col]), 'burn_time' : 0}
+                        for col in range(self.width)]
+                       for row in range(self.height)]
+
+        self.config[0][0]['state'] = 3
+        self.burning = set([(0, 0)])
+
+        self.color_image = np.array([[state_colors[self.config[row][col]['state']]
+                                      for col in range(self.width)]
+                                     for row in range(self.height)])
 
         self.t = 0
 
-        self.config[0, :] = self.setup_initial_state()
-        self.build_rule_set()
 
     def draw(self):
         """Draws the current state of the grid."""
@@ -115,8 +80,7 @@ class CASim(Model):
         plt.cla()
         if not plt.gca().yaxis_inverted():
             plt.gca().invert_yaxis()
-        plt.imshow(self.config, interpolation='none', vmin=0, vmax=self.k - 1,
-                cmap=self.cmap)
+        plt.imshow(self.color_image)
         plt.axis('image')
         plt.title('t = %d' % self.t)
 
@@ -124,23 +88,28 @@ class CASim(Model):
         """Performs a single step of the simulation by advancing time (and thus
         row) and applying the rule to determine the state of the cells."""
         self.t += 1
-        if self.t >= self.height:
+        if self.t >= self.run_time:
             return True
 
-        for patch in range(self.width):
-            # We want the items r to the left and to the right of this patch,
-            # while wrapping around (e.g. index -1 is the last item on the row).
-            # Since slices do not support this, we create an array with the
-            # indices we want and use that to index our grid.
-            indices = [i % self.width
-                    for i in range(patch - self.r, patch + self.r + 1)]
-            values = self.config[self.t - 1, indices]
-            self.config[self.t, patch] = self.check_rule(values)
+        for row, col in list(self.burning):
+            for nbr_row in range(max(row - 1, 0), min(row + 2, self.height - 1)):
+                for nbr_col in range(max(col - 1, 0), min(col + 2, self.width)):
+                    nbr = self.config[nbr_row][nbr_col]
+                    if random.random() < 0.5 and nbr['state'] in [1, 2]:
+                        nbr['burn_time'] = burn_time[nbr['state']]
+                        nbr['state'] += 2
+                        self.color_image[nbr_row][nbr_col] = 3
+                        self.burning.add((nbr_row, nbr_col))
+            item = self.config[row][col]
+            item['burn_time'] -= 1
+            if item['burn_time'] == 0:
+                self.burning.remove((row, col))
+                item['state'] = 5
+                self.color_image[row][col] = state_colors[4]
 
 
 if __name__ == '__main__':
     sim = CASim()
-    sim.show_colormap()
     from pyics import GUI
     cx = GUI(sim)
     cx.start()
